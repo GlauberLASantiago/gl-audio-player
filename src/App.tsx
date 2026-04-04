@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 type Track = {
   id: string;
@@ -59,6 +59,8 @@ function App() {
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const goToNextTrackRef = useRef<() => void>(() => {});
+  const restartTrackRef = useRef<(autoplay: boolean) => Promise<void>>(async () => {});
 
   const [tracks, setTracks] = useState<Track[]>(demoTracks);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -81,9 +83,6 @@ function App() {
       return undefined;
     }
 
-    audio.volume = volume;
-    audio.muted = isMuted;
-
     const handleLoadedMetadata = () => {
       setDuration(audio.duration || 0);
     };
@@ -94,11 +93,11 @@ function App() {
 
     const handleEnded = () => {
       if (repeatMode === 'one') {
-        void restartTrack(true);
+        void restartTrackRef.current(true);
         return;
       }
 
-      goToNextTrack();
+      goToNextTrackRef.current();
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -128,7 +127,19 @@ function App() {
         setIsPlaying(false);
       });
     }
-  }, [currentTrack, isPlaying]);
+  }, [currentTrack]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = volume;
+  }, [volume]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.muted = isMuted;
+  }, [isMuted]);
 
   useEffect(() => {
     const localSources = tracks.filter((track) => track.isLocal).map((track) => track.src);
@@ -289,6 +300,11 @@ function App() {
 
     setCurrentIndex((previous) => previous - 1);
   };
+
+  useLayoutEffect(() => {
+    goToNextTrackRef.current = goToNextTrack;
+    restartTrackRef.current = restartTrack;
+  });
 
   const handleSeek = (event: ChangeEvent<HTMLInputElement>) => {
     const audio = audioRef.current;
